@@ -44,7 +44,7 @@ module Neo4j
       app.config.neo4j.skip_migration_check = true if Rails.env.test?
 
       neo4j_config = ActiveSupport::OrderedOptions.new
-      app.config.neo4j.each { |k, v| neo4j_config[k] = v } if app.config.neo4j
+      app.config.neo4j&.each { |k, v| neo4j_config[k] = v }
 
       Neo4j::Config.configuration.merge!(neo4j_config.to_h)
 
@@ -62,7 +62,7 @@ module Neo4j
       options ||= {}
       register_neo4j_cypher_logging
 
-      Neo4j::ActiveBase.new_driver( url || path || default_driver_path_or_url, options)
+      Neo4j::ActiveBase.new_driver(url || path || default_driver_path_or_url, options)
     end
 
     def final_driver_config!(neo4j_config)

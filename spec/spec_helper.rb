@@ -228,6 +228,6 @@ RSpec.configure do |config|
     allow(Neo4j::ActiveBase).to receive(:logger).and_return(@active_base_logger)
   end
 
-  # TODO marshalling java objects, is it necessary?
+  # TODO: marshalling java objects, is it necessary?
   config.filter_run_excluding :ffi_only if RUBY_PLATFORM =~ /java/
 end
