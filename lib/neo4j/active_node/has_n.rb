@@ -126,8 +126,8 @@ module Neo4j::ActiveNode
         !!@cached_result
       end
 
-      def replace_with(*args)
-        nodes = @query_proxy.replace_with(*args).to_a
+      def replace_with(*args, options: {})
+        nodes = @query_proxy.replace_with(*args, options: options).to_a
         if @query_proxy.start_object.try(:new_record?)
           @cached_result = nil
         else
@@ -137,7 +137,7 @@ module Neo4j::ActiveNode
 
       alias to_ary to_a
 
-      QUERY_PROXY_METHODS = [:<<, :delete, :create, :pluck, :where, :where_not, :rel_where, :rel_order, :order, :skip, :limit]
+      QUERY_PROXY_METHODS = [:<<, :add_relation!, :delete, :create, :pluck, :where, :where_not, :rel_where, :rel_order, :order, :skip, :limit]
 
       QUERY_PROXY_METHODS.each do |method|
         define_method(method) do |*args, &block|
@@ -428,7 +428,7 @@ module Neo4j::ActiveNode
           association_proxy(name, {node: node, rel: rel, source_object: self, labels: options[:labels]}.merge!(options))
         end
 
-        define_has_many_setter(name)
+        define_has_many_setters(name)
 
         define_has_many_id_methods(name)
 
@@ -441,13 +441,25 @@ module Neo4j::ActiveNode
         end
       end
 
-      def define_has_many_setter(name)
+      def define_has_many_setters(name)
         define_method("#{name}=") do |other_nodes|
           association_proxy_cache.clear
 
           clear_deferred_nodes_for_association(name)
 
           self.class.run_transaction { association_proxy(name).replace_with(other_nodes) }
+        end
+
+        define_method("set_#{name}!") do |other_nodes|
+          association_proxy_cache.clear
+
+          clear_deferred_nodes_for_association(name)
+
+          self.class.run_transaction { association_proxy(name).replace_with(other_nodes, options: {verify: true}) }
+        end
+
+        define_method("add_#{name.to_s.singularize}!") do |other_node|
+          public_send(name).add_relation! other_node
         end
       end
 
@@ -475,7 +487,7 @@ module Neo4j::ActiveNode
 
         define_has_one_getter(name, default_options)
 
-        define_has_one_setter(name)
+        define_has_one_setters(name)
 
         define_has_one_id_methods(name)
 
@@ -520,7 +532,7 @@ module Neo4j::ActiveNode
         end
       end
 
-      def define_has_one_setter(name)
+      def define_has_one_setters(name)
         define_method("#{name}=") do |other_node|
           if persisted?
             other_node.save if other_node.respond_to?(:persisted?) && !other_node.persisted?
@@ -529,6 +541,17 @@ module Neo4j::ActiveNode
             # handle_non_persisted_node(other_node)
           else
             defer_create(name, other_node, clear: true)
+            other_node
+          end
+        end
+
+        define_method("set_#{name}!") do |other_node|
+          if persisted?
+            other_node.save if other_node.respond_to?(:persisted?) && !other_node.persisted?
+            association_proxy_cache.clear # TODO: Should probably just clear for this association...
+            self.class.run_transaction { association_proxy(name).replace_with(other_node, options: {verify: true}).first }
+          else
+            defer_create(name, other_node, {clear: true, verify: true})
             other_node
           end
         end
